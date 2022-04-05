@@ -1,3 +1,7 @@
+mod cpu;
+
 fn main() {
-    println!("Hello, world!")
+    let mut state = cpu::CpuState::default();
+
+    cpu::emulate_op(0xff, &mut state);
 }
