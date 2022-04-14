@@ -14,6 +14,15 @@ pub struct SystemState {
     memory: [u8; 0x10000],
 }
 
+impl Default for SystemState {
+    fn default() -> Self {
+        SystemState {
+            cpu_state: CpuState::default(),
+            memory: [0; 0x10000],
+        }
+    }
+}
+
 enum AddressingMode {
     I,     // Immediate
     A,     // Absolute
