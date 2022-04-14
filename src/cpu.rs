@@ -9,6 +9,11 @@ pub struct CpuState {
     p: u8,
 }
 
+pub struct SystemState {
+    cpu_state: CpuState,
+    memory: [u8; 0x10000],
+}
+
 enum AddressingMode {
     I,     // Immediate
     A,     // Absolute
@@ -20,11 +25,10 @@ enum AddressingMode {
     DPIIY, // Direct Page Indexed Indirect Y
 }
 
-pub fn emulate_op(opcode: u8, state: &mut CpuState) {
+pub fn emulate_op(sys: &mut SystemState) {
+    let opcode = get_byte_at_addr(sys, 0x0000);
+
     match opcode {
-        0x00 => state.a = 0xff,
         _ => println!("unimplemented instruction {}", opcode),
     }
-
-    println!("{}", state.a);
 }
