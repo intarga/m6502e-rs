@@ -148,6 +148,29 @@ fn set_n_z(sys: &mut SystemState, result: u8) {
     sys.cpu_state.zero = result == 0;
 }
 
+fn bcd_add(a: u8, b: u8) -> (u8, bool) {
+    let a_lo = a & 0x0f;
+    let b_lo = b & 0x0f;
+    let a_hi = a >> 4;
+    let b_hi = b >> 4;
+
+    let sum_lo = a_lo + b_lo;
+    let (res_lo, carry_lo) = if sum_lo > 9 {
+        (sum_lo - 10, true)
+    } else {
+        (sum_lo, false)
+    };
+
+    let sum_hi = a_hi + b_hi + carry_lo as u8;
+    let (res_hi, carry) = if sum_hi > 9 {
+        (sum_hi - 10, true)
+    } else {
+        (sum_hi, false)
+    };
+
+    ((res_hi << 4) | res_lo, carry)
+}
+
 // -- Instructions --
 
 fn adc(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
@@ -174,15 +197,18 @@ fn adc(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
             (byte, 2, 5 + page_cross as u8)
         } // _ => panic!("unsupported mode {:?} on instruction ADC", mode),
     };
-    if sys.cpu_state.decimal_mode {
-        panic!("Decimal addition not implemented yet!")
-    }
-
     let negative_before = negative_u8(sys.cpu_state.a);
     let (carry1, carry2): (bool, bool);
 
-    (sys.cpu_state.a, carry1) = sys.cpu_state.a.overflowing_add(operand);
-    (sys.cpu_state.a, carry2) = sys.cpu_state.a.overflowing_add(sys.cpu_state.carry as u8);
+    if sys.cpu_state.decimal_mode {
+        // TODO: check that the inputs are valid decimal numbers?
+        // not sure how the 6502 handles invalid inputs here
+        (sys.cpu_state.a, carry1) = bcd_add(sys.cpu_state.a, operand);
+        (sys.cpu_state.a, carry2) = bcd_add(sys.cpu_state.a, sys.cpu_state.carry as u8);
+    } else {
+        (sys.cpu_state.a, carry1) = sys.cpu_state.a.overflowing_add(operand);
+        (sys.cpu_state.a, carry2) = sys.cpu_state.a.overflowing_add(sys.cpu_state.carry as u8);
+    }
 
     sys.cpu_state.carry = carry1 || carry2;
     set_n_z(sys, sys.cpu_state.a);
