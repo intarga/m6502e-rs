@@ -148,25 +148,18 @@ fn set_n_z(sys: &mut SystemState, result: u8) {
     sys.cpu_state.zero = result == 0;
 }
 
+fn bcd_add_digit(a: u8, b: u8, carry: bool) -> (u8, bool) {
+    let sum = a + b + carry as u8;
+    if sum > 9 {
+        (sum - 10, true)
+    } else {
+        (sum, false)
+    }
+}
+
 fn bcd_add(a: u8, b: u8) -> (u8, bool) {
-    let a_lo = a & 0x0f;
-    let b_lo = b & 0x0f;
-    let a_hi = a >> 4;
-    let b_hi = b >> 4;
-
-    let sum_lo = a_lo + b_lo;
-    let (res_lo, carry_lo) = if sum_lo > 9 {
-        (sum_lo - 10, true)
-    } else {
-        (sum_lo, false)
-    };
-
-    let sum_hi = a_hi + b_hi + carry_lo as u8;
-    let (res_hi, carry) = if sum_hi > 9 {
-        (sum_hi - 10, true)
-    } else {
-        (sum_hi, false)
-    };
+    let (res_lo, carry_lo) = bcd_add_digit(a & 0x0f, b & 0x0f, false);
+    let (res_hi, carry) = bcd_add_digit(a >> 4, b >> 4, carry_lo);
 
     ((res_hi << 4) | res_lo, carry)
 }
