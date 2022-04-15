@@ -236,3 +236,13 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
 
     cyc
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bcd_add() {
+        assert_eq!((0x98, true), bcd_add(0x99, 0x99));
+    }
+}
