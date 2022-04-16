@@ -210,10 +210,53 @@ fn adc(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
     (length, cycles)
 }
 
+fn and(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
+    let (operand, length, cycles) = match mode {
+        AddressingMode::I => (get_immediate_byte(sys, 1), 2, 2),
+        AddressingMode::A => (get_absolute_byte(sys), 3, 4),
+        AddressingMode::Zp => (get_zero_page_byte(sys), 2, 3),
+        AddressingMode::Aix => {
+            let (byte, page_cross) = get_absolute_byte_indexed(sys, sys.cpu_state.x);
+            (byte, 3, 4 + page_cross as u8)
+        }
+        AddressingMode::Aiy => {
+            let (byte, page_cross) = get_absolute_byte_indexed(sys, sys.cpu_state.y);
+            (byte, 3, 4 + page_cross as u8)
+        }
+        AddressingMode::Zpix => (get_zero_page_byte_indexed(sys, sys.cpu_state.x), 2, 4),
+        AddressingMode::Zpiix => (
+            get_zero_page_byte_indexed_indirect(sys, sys.cpu_state.x),
+            2,
+            6,
+        ),
+        AddressingMode::Zpiiy => {
+            let (byte, page_cross) = get_zero_page_byte_indirect_indexed(sys, sys.cpu_state.y);
+            (byte, 2, 5 + page_cross as u8)
+        } // _ => panic!("unsupported mode {:?} on instruction AND", mode),
+    };
+
+    sys.cpu_state.a &= operand;
+
+    set_n_z(sys, sys.cpu_state.a);
+
+    (length, cycles)
+}
+
+// -- Emulation zone --
+
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
     let opcode = get_immediate_byte(sys, 0);
 
     let (length, cyc) = match opcode {
+        0x21 => and(sys, AddressingMode::Zpiix),
+        0x25 => and(sys, AddressingMode::Zp),
+        0x29 => and(sys, AddressingMode::I),
+        0x2d => and(sys, AddressingMode::A),
+        0x31 => and(sys, AddressingMode::Zpiiy),
+        0x35 => and(sys, AddressingMode::Zpix),
+        0x39 => and(sys, AddressingMode::Aiy),
+        0x3d => and(sys, AddressingMode::Aix),
+
         0x61 => adc(sys, AddressingMode::Zpiix),
         0x65 => adc(sys, AddressingMode::Zp),
         0x69 => adc(sys, AddressingMode::I),
@@ -222,6 +265,7 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x75 => adc(sys, AddressingMode::Zpix),
         0x79 => adc(sys, AddressingMode::Aiy),
         0x7d => adc(sys, AddressingMode::Aix),
+
         _ => panic!("unimplemented instruction {}", opcode),
     };
 
