@@ -42,12 +42,17 @@ enum AddressingMode {
     Zpix,  // Zero Page Indexed X
     Zpiix, // Zero Page Indexed Indirect X
     Zpiiy, // Zero Page Indirect Indexed Y
+    Acc,   //Accumulator
 }
 
 // -- Helper functions --
 
 fn get_byte_at_addr(sys: &mut SystemState, addr: u16) -> u8 {
     sys.memory[addr as usize]
+}
+
+fn set_byte_at_addr(sys: &mut SystemState, addr: u16, byte: u8) {
+    sys.memory[addr as usize] = byte;
 }
 
 fn cat_bytes(b1: u8, b2: u8) -> u16 {
@@ -59,15 +64,23 @@ fn get_immediate_byte(sys: &mut SystemState, offset: u16) -> u8 {
     get_byte_at_addr(sys, addr)
 }
 
-fn get_absolute_byte(sys: &mut SystemState) -> u8 {
+fn get_absolute_addr(sys: &mut SystemState) -> u16 {
     let addr_lo = get_immediate_byte(sys, 1);
     let addr_hi = get_immediate_byte(sys, 2);
-    let addr = cat_bytes(addr_hi, addr_lo);
+    cat_bytes(addr_hi, addr_lo)
+}
 
+fn get_absolute_byte(sys: &mut SystemState) -> u8 {
+    let addr = get_absolute_addr(sys);
     get_byte_at_addr(sys, addr)
 }
 
-fn get_absolute_byte_indexed(sys: &mut SystemState, index: u8) -> (u8, bool) {
+fn set_absolute_byte(sys: &mut SystemState, byte: u8) {
+    let addr = get_absolute_addr(sys);
+    set_byte_at_addr(sys, addr, byte)
+}
+
+fn get_absolute_addr_indexed(sys: &mut SystemState, index: u8) -> (u16, bool) {
     let mut addr_lo = get_immediate_byte(sys, 1);
     let mut addr_hi = get_immediate_byte(sys, 2);
 
@@ -80,9 +93,17 @@ fn get_absolute_byte_indexed(sys: &mut SystemState, index: u8) -> (u8, bool) {
             .expect("Overflow indexing memory address")
     }
 
-    let addr = cat_bytes(addr_hi, addr_lo);
+    (cat_bytes(addr_hi, addr_lo), carry)
+}
 
-    (get_byte_at_addr(sys, addr), carry)
+fn get_absolute_byte_indexed(sys: &mut SystemState, index: u8) -> (u8, bool) {
+    let (addr, boundary_cross) = get_absolute_addr_indexed(sys, index);
+    (get_byte_at_addr(sys, addr), boundary_cross)
+}
+
+fn set_absolute_byte_indexed(sys: &mut SystemState, index: u8, byte: u8) {
+    let (addr, _) = get_absolute_addr_indexed(sys, index);
+    set_byte_at_addr(sys, addr, byte)
 }
 
 fn get_zero_page_byte(sys: &mut SystemState) -> u8 {
@@ -90,9 +111,19 @@ fn get_zero_page_byte(sys: &mut SystemState) -> u8 {
     get_byte_at_addr(sys, addr)
 }
 
+fn set_zero_page_byte(sys: &mut SystemState, byte: u8) {
+    let addr = get_immediate_byte(sys, 1) as u16;
+    set_byte_at_addr(sys, addr, byte)
+}
+
 fn get_zero_page_byte_indexed(sys: &mut SystemState, index: u8) -> u8 {
     let addr = get_immediate_byte(sys, 1).wrapping_add(index) as u16;
     get_byte_at_addr(sys, addr)
+}
+
+fn set_zero_page_byte_indexed(sys: &mut SystemState, index: u8, byte: u8) {
+    let addr = get_immediate_byte(sys, 1).wrapping_add(index) as u16;
+    set_byte_at_addr(sys, addr, byte)
 }
 
 fn get_zero_page_byte_indexed_indirect(sys: &mut SystemState, index: u8) -> u8 {
@@ -188,7 +219,8 @@ fn adc(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
         AddressingMode::Zpiiy => {
             let (byte, page_cross) = get_zero_page_byte_indirect_indexed(sys, sys.cpu_state.y);
             (byte, 2, 5 + page_cross as u8)
-        } // _ => panic!("unsupported mode {:?} on instruction ADC", mode),
+        }
+        _ => panic!("unsupported mode {:?} on instruction ADC", mode),
     };
     let negative_before = negative_u8(sys.cpu_state.a);
     let (carry1, carry2): (bool, bool);
@@ -232,12 +264,37 @@ fn and(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
         AddressingMode::Zpiiy => {
             let (byte, page_cross) = get_zero_page_byte_indirect_indexed(sys, sys.cpu_state.y);
             (byte, 2, 5 + page_cross as u8)
-        } // _ => panic!("unsupported mode {:?} on instruction AND", mode),
+        }
+        _ => panic!("unsupported mode {:?} on instruction AND", mode),
     };
 
     sys.cpu_state.a &= operand;
 
     set_n_z(sys, sys.cpu_state.a);
+
+    (length, cycles)
+}
+
+fn asl(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
+    let (operand, length, cycles) = match mode {
+        AddressingMode::Acc => (sys.cpu_state.a, 1, 2),
+        AddressingMode::A => (get_absolute_byte(sys), 3, 6),
+        AddressingMode::Zp => (get_zero_page_byte(sys), 2, 5),
+        AddressingMode::Aix => (get_absolute_byte_indexed(sys, sys.cpu_state.x).0, 3, 7),
+        AddressingMode::Zpix => (get_zero_page_byte_indexed(sys, sys.cpu_state.x), 2, 6),
+        _ => panic!("unsupported mode {:?} on instruction ASL", mode),
+    };
+
+    let result = operand << 1;
+
+    match mode {
+        AddressingMode::Acc => sys.cpu_state.a = result,
+        AddressingMode::A => set_absolute_byte(sys, result),
+        AddressingMode::Zp => set_zero_page_byte(sys, result),
+        AddressingMode::Aix => set_absolute_byte_indexed(sys, sys.cpu_state.x, result),
+        AddressingMode::Zpix => set_zero_page_byte_indexed(sys, sys.cpu_state.x, result),
+        _ => panic!("unsupported mode {:?} on instruction ASL", mode),
+    }
 
     (length, cycles)
 }
@@ -248,6 +305,12 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
     let opcode = get_immediate_byte(sys, 0);
 
     let (length, cyc) = match opcode {
+        0x06 => asl(sys, AddressingMode::Zp),
+        0x0a => asl(sys, AddressingMode::Acc),
+        0x0e => asl(sys, AddressingMode::A),
+        0x1e => asl(sys, AddressingMode::Aix),
+        0x16 => asl(sys, AddressingMode::Zpix),
+
         0x21 => and(sys, AddressingMode::Zpiix),
         0x25 => and(sys, AddressingMode::Zp),
         0x29 => and(sys, AddressingMode::I),
