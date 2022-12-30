@@ -157,7 +157,7 @@ fn get_zero_page_byte_indirect_indexed(sys: &mut SystemState, index: u8) -> (u8,
     (get_byte_at_addr(sys, addr2), carry)
 }
 
-fn increment_pc(sys: &mut SystemState, num: u8) {
+fn increment_pc(sys: &mut SystemState, num: u8) -> bool {
     let carry: bool;
     (sys.cpu_state.pcl, carry) = sys.cpu_state.pcl.overflowing_add(num);
 
@@ -168,6 +168,23 @@ fn increment_pc(sys: &mut SystemState, num: u8) {
             .checked_add(1)
             .expect("Overflow of program counter");
     }
+
+    carry
+}
+
+fn decrement_pc(sys: &mut SystemState, num: u8) -> bool {
+    let carry: bool;
+    (sys.cpu_state.pcl, carry) = sys.cpu_state.pcl.overflowing_sub(num);
+
+    if carry {
+        sys.cpu_state.pch = sys
+            .cpu_state
+            .pch
+            .checked_sub(1)
+            .expect("Overflow of program counter");
+    }
+
+    carry
 }
 
 fn negative_u8(num: u8) -> bool {
@@ -299,6 +316,23 @@ fn asl(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
     (length, cycles)
 }
 
+fn bcc(sys: &mut SystemState) -> (u8, u8) {
+    if !sys.cpu_state.carry {
+        let displacement = get_immediate_byte(sys, 1);
+        let displacement_mag = displacement & 0x7f;
+
+        let page_cross = if (displacement & 0x80) != 0 {
+            decrement_pc(sys, displacement_mag)
+        } else {
+            increment_pc(sys, displacement_mag)
+        };
+
+        (0, 3 + page_cross as u8) // TODO: verify this byte offset is correct
+    } else {
+        (2, 2)
+    }
+}
+
 // -- Emulation zone --
 
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
@@ -328,6 +362,8 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x75 => adc(sys, AddressingMode::Zpix),
         0x79 => adc(sys, AddressingMode::Aiy),
         0x7d => adc(sys, AddressingMode::Aix),
+
+        0x90 => bcc(sys),
 
         _ => panic!("unimplemented instruction {}", opcode),
     };
