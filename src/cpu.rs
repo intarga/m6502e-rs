@@ -212,6 +212,17 @@ fn bcd_add(a: u8, b: u8) -> (u8, bool) {
     ((res_hi << 4) | res_lo, carry)
 }
 
+fn branch(sys: &mut SystemState) -> bool {
+    let displacement = get_immediate_byte(sys, 1);
+    let displacement_mag = displacement & 0x7f;
+
+    if (displacement & 0x80) != 0 {
+        decrement_pc(sys, displacement_mag)
+    } else {
+        increment_pc(sys, displacement_mag)
+    }
+}
+
 // -- Instructions --
 
 fn adc(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
@@ -318,15 +329,16 @@ fn asl(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
 
 fn bcc(sys: &mut SystemState) -> (u8, u8) {
     if !sys.cpu_state.carry {
-        let displacement = get_immediate_byte(sys, 1);
-        let displacement_mag = displacement & 0x7f;
+        let page_cross = branch(sys);
+        (0, 3 + page_cross as u8) // TODO: verify this byte offset is correct
+    } else {
+        (2, 2)
+    }
+}
 
-        let page_cross = if (displacement & 0x80) != 0 {
-            decrement_pc(sys, displacement_mag)
-        } else {
-            increment_pc(sys, displacement_mag)
-        };
-
+fn bcs(sys: &mut SystemState) -> (u8, u8) {
+    if sys.cpu_state.carry {
+        let page_cross = branch(sys);
         (0, 3 + page_cross as u8) // TODO: verify this byte offset is correct
     } else {
         (2, 2)
@@ -364,6 +376,8 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x7d => adc(sys, AddressingMode::Aix),
 
         0x90 => bcc(sys),
+
+        0xb0 => bcs(sys),
 
         _ => panic!("unimplemented instruction {}", opcode),
     };
