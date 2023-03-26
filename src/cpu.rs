@@ -377,38 +377,39 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
 
     let (length, cyc) = match opcode {
         0x06 => asl(sys, AddressingMode::Zp),
+
         0x0a => asl(sys, AddressingMode::Acc),
         0x0e => asl(sys, AddressingMode::A),
 
         0x10 => bpl(sys),
-
-        0x1e => asl(sys, AddressingMode::Aix),
         0x16 => asl(sys, AddressingMode::Zpix),
 
+        0x1e => asl(sys, AddressingMode::Aix),
+
         0x21 => and(sys, AddressingMode::Zpiix),
-
         0x24 => bit(sys, AddressingMode::Zp),
-
         0x25 => and(sys, AddressingMode::Zp),
+
         0x29 => and(sys, AddressingMode::I),
-
         0x2c => bit(sys, AddressingMode::A),
-
         0x2d => and(sys, AddressingMode::A),
 
         0x30 => bmi(sys),
-
         0x31 => and(sys, AddressingMode::Zpiiy),
         0x35 => and(sys, AddressingMode::Zpix),
+
         0x39 => and(sys, AddressingMode::Aiy),
         0x3d => and(sys, AddressingMode::Aix),
 
         0x61 => adc(sys, AddressingMode::Zpiix),
         0x65 => adc(sys, AddressingMode::Zp),
+
         0x69 => adc(sys, AddressingMode::I),
         0x6d => adc(sys, AddressingMode::A),
+
         0x71 => adc(sys, AddressingMode::Zpiiy),
         0x75 => adc(sys, AddressingMode::Zpix),
+
         0x79 => adc(sys, AddressingMode::Aiy),
         0x7d => adc(sys, AddressingMode::Aix),
 
