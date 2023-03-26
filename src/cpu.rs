@@ -362,6 +362,10 @@ fn bmi(sys: &mut SystemState) -> (u8, u8) {
     branch(sys, sys.cpu_state.negative)
 }
 
+fn bne(sys: &mut SystemState) -> (u8, u8) {
+    branch(sys, !sys.cpu_state.zero)
+}
+
 // -- Emulation zone --
 
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
@@ -404,6 +408,8 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x90 => bcc(sys),
 
         0xb0 => bcs(sys),
+
+        0xd0 => bne(sys),
 
         0xf0 => beq(sys),
 
