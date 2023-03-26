@@ -6,14 +6,14 @@ pub struct CpuState {
     y: u8,
     pch: u8,
     pcl: u8,
-    // s: u8,
+    s: u8,
 
     // flags
     negative: bool,
     signed_overflow: bool,
-    // brk_interrupt: bool,
+    brk_interrupt: bool,
     decimal_mode: bool,
-    // irq_interrupt_disable: bool,
+    irq_interrupt_disable: bool,
     zero: bool,
     carry: bool,
 }
@@ -26,7 +26,7 @@ pub struct SystemState {
 impl Default for SystemState {
     fn default() -> Self {
         SystemState {
-            cpu_state: CpuState::default(),
+            cpu_state: CpuState::default(), // TODO: init stack pointer to 0xff
             memory: [0; 0x10000],
         }
     }
@@ -130,7 +130,7 @@ fn get_zero_page_byte_indexed_indirect(sys: &mut SystemState, index: u8) -> u8 {
     let addr1 = get_immediate_byte(sys, 1).wrapping_add(index) as u16;
 
     let addr2_lo = get_byte_at_addr(sys, addr1);
-    let addr2_hi = get_byte_at_addr(sys, (addr1 + 1) & 0xff);
+    let addr2_hi = get_byte_at_addr(sys, (addr1 + 1) & 0xff); // is this and really needed?
     let addr2 = cat_bytes(addr2_hi, addr2_lo);
 
     get_byte_at_addr(sys, addr2)
@@ -141,7 +141,7 @@ fn get_zero_page_byte_indirect_indexed(sys: &mut SystemState, index: u8) -> (u8,
     let addr1 = get_immediate_byte(sys, 1) as u16;
 
     let mut addr2_lo = get_byte_at_addr(sys, addr1);
-    let mut addr2_hi = get_byte_at_addr(sys, (addr1 + 1) & 0xff);
+    let mut addr2_hi = get_byte_at_addr(sys, (addr1 + 1) & 0xff); // is this and really needed?
 
     let carry: bool;
     (addr2_lo, carry) = addr2_lo.overflowing_add(index);
@@ -226,6 +226,27 @@ fn branch(sys: &mut SystemState, predicate: bool) -> (u8, u8) {
     } else {
         (2, 2)
     }
+}
+
+fn push_to_stack(sys: &mut SystemState, byte: u8) {
+    set_byte_at_addr(sys, cat_bytes(0x01, sys.cpu_state.s), byte);
+
+    sys.cpu_state.s = sys.cpu_state.s.checked_sub(1).expect("Stack overflow");
+}
+
+fn make_status_byte(sys: &SystemState) -> u8 {
+    sys.cpu_state.carry as u8
+        | (sys.cpu_state.zero as u8) << 1
+        | (sys.cpu_state.irq_interrupt_disable as u8) << 2
+        | (sys.cpu_state.decimal_mode as u8) << 3
+        | (sys.cpu_state.brk_interrupt as u8) << 4
+        | (sys.cpu_state.signed_overflow as u8) << 6
+        | (sys.cpu_state.negative as u8) << 7
+}
+
+fn load_interrupt_vector(sys: &mut SystemState) {
+    sys.cpu_state.pcl = get_byte_at_addr(sys, cat_bytes(0xff, 0xfe));
+    sys.cpu_state.pch = get_byte_at_addr(sys, cat_bytes(0xff, 0xff));
 }
 
 // -- Instructions --
@@ -370,12 +391,29 @@ fn bpl(sys: &mut SystemState) -> (u8, u8) {
     branch(sys, !sys.cpu_state.negative)
 }
 
+fn brk(sys: &mut SystemState) -> (u8, u8) {
+    increment_pc(sys, 2);
+    push_to_stack(sys, sys.cpu_state.pch);
+    push_to_stack(sys, sys.cpu_state.pcl);
+
+    sys.cpu_state.brk_interrupt = true;
+    push_to_stack(sys, make_status_byte(sys));
+    sys.cpu_state.irq_interrupt_disable = true;
+
+    load_interrupt_vector(sys);
+
+    // the length is actually 2 bytes, but pc must be incemented negative_before
+    // it is pushed to the stack
+    (0, 7)
+}
+
 // -- Emulation zone --
 
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
     let opcode = get_immediate_byte(sys, 0);
 
     let (length, cyc) = match opcode {
+        0x00 => brk(sys),
         0x06 => asl(sys, AddressingMode::Zp),
 
         0x0a => asl(sys, AddressingMode::Acc),
