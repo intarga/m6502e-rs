@@ -358,6 +358,10 @@ fn bit(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
     (length, cycles)
 }
 
+fn bmi(sys: &mut SystemState) -> (u8, u8) {
+    branch(sys, sys.cpu_state.negative)
+}
+
 // -- Emulation zone --
 
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
@@ -380,6 +384,9 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x2c => bit(sys, AddressingMode::A),
 
         0x2d => and(sys, AddressingMode::A),
+
+        0x30 => bmi(sys),
+
         0x31 => and(sys, AddressingMode::Zpiiy),
         0x35 => and(sys, AddressingMode::Zpix),
         0x39 => and(sys, AddressingMode::Aiy),
