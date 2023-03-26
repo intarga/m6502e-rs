@@ -344,6 +344,20 @@ fn beq(sys: &mut SystemState) -> (u8, u8) {
     branch(sys, sys.cpu_state.zero)
 }
 
+fn bit(sys: &mut SystemState, mode: AddressingMode) -> (u8, u8) {
+    let (operand, length, cycles) = match mode {
+        AddressingMode::A => (get_absolute_byte(sys), 3, 4),
+        AddressingMode::Zp => (get_zero_page_byte(sys), 2, 3),
+        _ => panic!("unsupported mode {:?} on instruction BIT", mode),
+    };
+
+    sys.cpu_state.negative = negative_u8(operand);
+    sys.cpu_state.signed_overflow = (operand & 0x40) != 0x00;
+    sys.cpu_state.zero = (operand & sys.cpu_state.a) == 0x00;
+
+    (length, cycles)
+}
+
 // -- Emulation zone --
 
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
@@ -357,8 +371,14 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x16 => asl(sys, AddressingMode::Zpix),
 
         0x21 => and(sys, AddressingMode::Zpiix),
+
+        0x24 => bit(sys, AddressingMode::Zp),
+
         0x25 => and(sys, AddressingMode::Zp),
         0x29 => and(sys, AddressingMode::I),
+
+        0x2c => bit(sys, AddressingMode::A),
+
         0x2d => and(sys, AddressingMode::A),
         0x31 => and(sys, AddressingMode::Zpiiy),
         0x35 => and(sys, AddressingMode::Zpix),
