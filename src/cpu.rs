@@ -366,6 +366,10 @@ fn bne(sys: &mut SystemState) -> (u8, u8) {
     branch(sys, !sys.cpu_state.zero)
 }
 
+fn bpl(sys: &mut SystemState) -> (u8, u8) {
+    branch(sys, !sys.cpu_state.negative)
+}
+
 // -- Emulation zone --
 
 pub fn emulate_op(sys: &mut SystemState) -> u8 {
@@ -375,6 +379,9 @@ pub fn emulate_op(sys: &mut SystemState) -> u8 {
         0x06 => asl(sys, AddressingMode::Zp),
         0x0a => asl(sys, AddressingMode::Acc),
         0x0e => asl(sys, AddressingMode::A),
+
+        0x10 => bpl(sys),
+
         0x1e => asl(sys, AddressingMode::Aix),
         0x16 => asl(sys, AddressingMode::Zpix),
 
